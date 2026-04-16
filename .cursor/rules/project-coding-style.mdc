@@ -1,0 +1,30 @@
+---
+description: Project coding style for readable, practical production code
+alwaysApply: true
+---
+
+# Project Coding Style
+
+## Core Principles
+
+- Keep code simple and human-readable.
+- Avoid over-engineering and deep abstraction.
+- Do not create unnecessary generic utility layers.
+- Use clear, descriptive file names and identifiers.
+- Prefer explicit typing over implicit or vague types.
+
+## Architecture and Boundaries
+
+- Keep controller/service separation practical and direct.
+- Add abstractions only when they clearly reduce complexity.
+- Solve the current problem well; do not build speculative frameworks.
+
+## Comments and Documentation
+
+- Add comments only where intent is not obvious from code.
+- Keep comments short and focused on *why*, not *what*.
+
+## Production Expectations
+
+- Keep code production-friendly, but still easy to understand and maintain.
+- Prefer predictable behavior, clear error handling, and straightforward control flow.
