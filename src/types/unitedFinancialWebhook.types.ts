@@ -12,6 +12,7 @@ export interface WebhookNormalizationFieldError {
   field: keyof UnitedFinancialCalculatorInput;
   message: string;
   attemptedPatterns: string[];
+  matchedKey?: string;
 }
 
 export interface UnitedFinancialWebhookNormalizationSuccess {

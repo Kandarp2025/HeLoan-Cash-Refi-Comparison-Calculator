@@ -2,6 +2,8 @@ import { Router } from "express";
 import {
   calculateUnitedFinancialComparison,
   previewUnitedFinancialWebhook,
+  processUnitedFinancialWebhook,
+  renderUnitedFinancialComparisonImageResponse,
   renderUnitedFinancialComparisonHtmlResponse,
   validateUnitedFinancialPayload
 } from "../controllers/unitedFinancialController";
@@ -13,6 +15,11 @@ const unitedFinancialRoutes = Router();
 unitedFinancialRoutes.post(
   "/api/united-financial/webhook-preview",
   previewUnitedFinancialWebhook
+);
+
+unitedFinancialRoutes.post(
+  "/api/united-financial/comparison/compute",
+  processUnitedFinancialWebhook
 );
 
 unitedFinancialRoutes.post(
@@ -31,6 +38,12 @@ unitedFinancialRoutes.post(
   "/api/united-financial/render-html",
   validateRequest(unitedFinancialPayloadSchema),
   renderUnitedFinancialComparisonHtmlResponse
+);
+
+unitedFinancialRoutes.post(
+  "/api/united-financial/render-image",
+  validateRequest(unitedFinancialPayloadSchema),
+  renderUnitedFinancialComparisonImageResponse
 );
 
 export default unitedFinancialRoutes;
