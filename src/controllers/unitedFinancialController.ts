@@ -14,6 +14,18 @@ import {
   forwardUnitedFinancialWebhookResult,
   WebhookForwarderError
 } from "../services/unitedFinancialWebhookForwarder.service";
+import { renderComparisonHtmlToImageBuffer } from "../services/htmlRender.service";
+import {
+  uploadImageBufferToCloudinary,
+  CloudinaryUploadError
+} from "../services/cloudinary.service";
+import { buildComparisonResultHtml } from "../services/comparisonTemplate.service";
+
+interface ImageRenderStatus {
+  success: boolean;
+  message: string;
+  imageUrl?: string;
+}
 
 export const validateUnitedFinancialPayload = (
   req: Request<unknown, unknown, UnitedFinancialCalculatorInput>,
@@ -139,7 +151,9 @@ const DEFAULT_RESULT_WEBHOOK_URL =
   "https://services.leadconnectorhq.com/hooks/LNMN6oG6KxnHqWFFholL/webhook-trigger/a4d636e6-dd17-4f8a-96db-fc81052006c8";
 
 const getResultWebhookUrl = (): string =>
-  process.env.UNITED_FINANCIAL_RESULT_WEBHOOK_URL?.trim() || DEFAULT_RESULT_WEBHOOK_URL;
+  process.env.RESULT_WEBHOOK_URL?.trim()
+  || process.env.UNITED_FINANCIAL_RESULT_WEBHOOK_URL?.trim()
+  || DEFAULT_RESULT_WEBHOOK_URL;
 
 export const processUnitedFinancialWebhook = async (
   req: Request<unknown, unknown, ProcessWebhookRequestBody>,
@@ -176,42 +190,63 @@ export const processUnitedFinancialWebhook = async (
   }
 
   const result = runUnitedFinancialCalculation(validation.data);
-  const html = renderUnitedFinancialComparisonHtml(result);
+  const generatedAt = new Date().toISOString();
 
-  let comparisonImageBase64: string;
+  const imageRender: ImageRenderStatus = {
+    success: false,
+    message: "Image rendering skipped"
+  };
+  let comparisonImageUrl: string | undefined;
+
   try {
-    const screenshotBuffer = await generateUnitedFinancialComparisonScreenshot(html);
-    comparisonImageBase64 = bufferToPngDataUrl(screenshotBuffer);
-  } catch (error) {
-    const message =
-      error instanceof ScreenshotServiceError
-        ? error.message
-        : "Unable to generate comparison image";
-
-    res.status(500).json({
-      success: false,
-      statusCode: 500,
-      message
+    const html = buildComparisonResultHtml({
+      result,
+      meta: normalization.meta,
+      generatedAt
     });
-    return;
+    const pngBuffer = await renderComparisonHtmlToImageBuffer(html);
+    console.log("[comparison-image] render success");
+
+    try {
+      const uploaded = await uploadImageBufferToCloudinary(pngBuffer);
+      comparisonImageUrl = uploaded.secureUrl;
+      imageRender.success = true;
+      imageRender.message = "Uploaded to Cloudinary";
+      imageRender.imageUrl = uploaded.secureUrl;
+      console.log("[comparison-image] uploaded", uploaded.secureUrl);
+    } catch (uploadError) {
+      const details =
+        uploadError instanceof CloudinaryUploadError && uploadError.details
+          ? uploadError.details
+          : (uploadError as Error)?.message;
+      imageRender.success = false;
+      imageRender.message = details
+        ? `Cloudinary upload failed: ${details}`
+        : "Cloudinary upload failed";
+      console.error("[comparison-image] upload failed:", details ?? "unknown error");
+    }
+  } catch (renderError) {
+    const message = (renderError as Error)?.message ?? "HTML render failed";
+    imageRender.success = false;
+    imageRender.message = "HTML render failed";
+    console.error("[comparison-image] render failed:", message);
   }
 
-  const generatedAt = new Date().toISOString();
-  const webhookPayload = {
+  const webhookPayload: Record<string, unknown> = {
     success: true,
     meta: normalization.meta,
     normalizedPayload: validation.data,
     result,
-    comparisonImageBase64,
     generatedAt
   };
+  if (comparisonImageUrl) {
+    webhookPayload.comparisonImageUrl = comparisonImageUrl;
+  }
 
   const resultWebhookUrl = getResultWebhookUrl();
 
-  const ghlUpload = {
-    success: false,
-    message: "GHL upload disabled"
-  };
+  console.log("[result-webhook] POST ->", resultWebhookUrl);
+  console.log("[result-webhook] payload:", JSON.stringify(webhookPayload, null, 2));
 
   try {
     await forwardUnitedFinancialWebhookResult(resultWebhookUrl, webhookPayload);
@@ -220,7 +255,7 @@ export const processUnitedFinancialWebhook = async (
       success: true,
       statusCode: 200,
       message: "Processed successfully. Full response has been sent to the configured result webhook.",
-      ghlUpload
+      imageRender
     });
   } catch (error) {
     if (error instanceof WebhookForwarderError) {
@@ -228,7 +263,7 @@ export const processUnitedFinancialWebhook = async (
         success: false,
         statusCode: error.statusCode,
         message: `Processed successfully, but failed to forward the response to the result webhook: ${error.message}`,
-        ghlUpload
+        imageRender
       });
       return;
     }
@@ -237,7 +272,7 @@ export const processUnitedFinancialWebhook = async (
       success: false,
       statusCode: 502,
       message: "Processed successfully, but failed to forward the response to the result webhook.",
-      ghlUpload
+      imageRender
     });
   }
 };
