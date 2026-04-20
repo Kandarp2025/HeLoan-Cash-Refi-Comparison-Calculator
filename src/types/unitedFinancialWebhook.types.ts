@@ -6,6 +6,7 @@ export interface UnitedFinancialWebhookMeta {
   id?: string | number;
   name?: string;
   email?: string;
+  phone?: string;
 }
 
 export interface WebhookNormalizationFieldError {

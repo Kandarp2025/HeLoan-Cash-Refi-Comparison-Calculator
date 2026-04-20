@@ -131,35 +131,30 @@ export const previewUnitedFinancialWebhook = (
 
 type ProcessWebhookRequestBody =
   | {
-      callbackUrl?: string;
       data?: RawWebhookPayload;
     }
   | RawWebhookPayload;
+
+const DEFAULT_RESULT_WEBHOOK_URL =
+  "https://services.leadconnectorhq.com/hooks/LNMN6oG6KxnHqWFFholL/webhook-trigger/a4d636e6-dd17-4f8a-96db-fc81052006c8";
+
+const getResultWebhookUrl = (): string =>
+  process.env.UNITED_FINANCIAL_RESULT_WEBHOOK_URL?.trim() || DEFAULT_RESULT_WEBHOOK_URL;
 
 export const processUnitedFinancialWebhook = async (
   req: Request<unknown, unknown, ProcessWebhookRequestBody>,
   res: Response
 ): Promise<void> => {
   const body = req.body as Record<string, unknown> | undefined;
-  const callbackUrl = typeof body?.callbackUrl === "string" ? body.callbackUrl : undefined;
-
-  const rawPayloadCandidate = (body?.data as RawWebhookPayload | undefined) ?? (req.body as RawWebhookPayload);
   const rawPayload: RawWebhookPayload =
-    callbackUrl && rawPayloadCandidate && typeof rawPayloadCandidate === "object" && !Array.isArray(rawPayloadCandidate)
-      ? (() => {
-          const copy = { ...(rawPayloadCandidate as Record<string, unknown>) };
-          delete (copy as { callbackUrl?: unknown }).callbackUrl;
-          return copy;
-        })()
-      : rawPayloadCandidate;
+    (body?.data as RawWebhookPayload | undefined) ?? (req.body as RawWebhookPayload);
 
   const normalization = normalizeUnitedFinancialWebhookPayload(rawPayload);
   if (!normalization.success) {
     res.status(400).json({
       success: false,
+      statusCode: 400,
       message: "Unable to normalize webhook payload into calculator input",
-      meta: normalization.meta,
-      rawPayload,
       errors: normalization.errors
     });
     return;
@@ -170,10 +165,8 @@ export const processUnitedFinancialWebhook = async (
   if (!validation.success) {
     res.status(400).json({
       success: false,
+      statusCode: 400,
       message: "Normalized payload failed calculator validation",
-      meta: normalization.meta,
-      rawPayload,
-      normalizedPayload,
       errors: validation.error.issues.map((issue) => ({
         field: issue.path.join("."),
         message: issue.message
@@ -190,23 +183,21 @@ export const processUnitedFinancialWebhook = async (
     const screenshotBuffer = await generateUnitedFinancialComparisonScreenshot(html);
     comparisonImageBase64 = bufferToPngDataUrl(screenshotBuffer);
   } catch (error) {
-    if (error instanceof ScreenshotServiceError) {
-      res.status(500).json({
-        success: false,
-        message: error.message
-      });
-      return;
-    }
+    const message =
+      error instanceof ScreenshotServiceError
+        ? error.message
+        : "Unable to generate comparison image";
 
     res.status(500).json({
       success: false,
-      message: "Unable to generate comparison image"
+      statusCode: 500,
+      message
     });
     return;
   }
 
   const generatedAt = new Date().toISOString();
-  const finalResponse = {
+  const webhookPayload = {
     success: true,
     meta: normalization.meta,
     normalizedPayload: validation.data,
@@ -215,40 +206,38 @@ export const processUnitedFinancialWebhook = async (
     generatedAt
   };
 
-  if (!callbackUrl) {
-    res.status(200).json(finalResponse);
-    return;
-  }
+  const resultWebhookUrl = getResultWebhookUrl();
+
+  const ghlUpload = {
+    success: false,
+    message: "GHL upload disabled"
+  };
 
   try {
-    const forwarding = await forwardUnitedFinancialWebhookResult(callbackUrl, finalResponse);
+    await forwardUnitedFinancialWebhookResult(resultWebhookUrl, webhookPayload);
 
     res.status(200).json({
       success: true,
-      message: "Processed successfully and forwarded to callback URL",
-      forwarded: true,
-      callbackUrl: forwarding.callbackUrl,
-      forwarding: {
-        status: forwarding.status,
-        statusText: forwarding.statusText
-      },
-      data: finalResponse
+      statusCode: 200,
+      message: "Processed successfully. Full response has been sent to the configured result webhook.",
+      ghlUpload
     });
   } catch (error) {
     if (error instanceof WebhookForwarderError) {
       res.status(error.statusCode).json({
         success: false,
-        message: error.message,
-        callbackUrl: error.callbackUrl,
-        details: error.details
+        statusCode: error.statusCode,
+        message: `Processed successfully, but failed to forward the response to the result webhook: ${error.message}`,
+        ghlUpload
       });
       return;
     }
 
     res.status(502).json({
       success: false,
-      message: "Unable to forward webhook result to callback URL",
-      callbackUrl
+      statusCode: 502,
+      message: "Processed successfully, but failed to forward the response to the result webhook.",
+      ghlUpload
     });
   }
 };

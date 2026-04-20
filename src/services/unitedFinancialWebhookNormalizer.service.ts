@@ -149,7 +149,8 @@ const FIELD_DEFINITIONS: Record<CalculatorField, FieldDefinition> = {
 const METADATA_KEYS = {
   id: ["id"],
   name: ["name"],
-  email: ["email"]
+  email: ["email"],
+  phone: ["phone", "Phone", "phoneNumber", "phone_number"]
 };
 
 const ALLOWED_HELOAN_REPAYMENT_YEARS = new Set([10, 15, 20, 30]);
@@ -290,11 +291,21 @@ const extractMeta = (rawPayload: RawWebhookPayload): UnitedFinancialWebhookMeta 
   const id = findFirstValueByKeys(rawPayload, METADATA_KEYS.id);
   const name = findFirstValueByKeys(rawPayload, METADATA_KEYS.name);
   const email = findFirstValueByKeys(rawPayload, METADATA_KEYS.email);
+  const phone = findFirstValueByKeys(rawPayload, METADATA_KEYS.phone);
+
+  let phoneValue: string | undefined;
+  if (typeof phone === "string") {
+    const trimmed = phone.trim();
+    phoneValue = trimmed.length > 0 ? trimmed : undefined;
+  } else if (typeof phone === "number" && Number.isFinite(phone)) {
+    phoneValue = String(phone);
+  }
 
   return {
     id: typeof id === "string" || typeof id === "number" ? id : undefined,
     name: typeof name === "string" ? name : undefined,
-    email: typeof email === "string" ? email : undefined
+    email: typeof email === "string" ? email : undefined,
+    phone: phoneValue
   };
 };
 
