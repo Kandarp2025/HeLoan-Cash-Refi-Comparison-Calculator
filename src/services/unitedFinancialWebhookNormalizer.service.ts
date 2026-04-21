@@ -257,8 +257,12 @@ export const toRequiredNumber = (value: unknown, label: string): NumberExtractio
       return { error: `${label} is required` };
     }
 
-    const parsed = Number(trimmed.replace(/,/g, ""));
-    if (Number.isFinite(parsed)) {
+    // Strip currency symbols, commas, whitespace, percent signs, and any
+    // other non-numeric characters. Keep digits, a decimal point, and an
+    // optional leading minus so values like "$500,000.00" or "6.00%" parse.
+    const cleaned = trimmed.replace(/[^0-9.\-]/g, "");
+    const parsed = Number(cleaned);
+    if (cleaned && Number.isFinite(parsed)) {
       return { value: parsed };
     }
 
