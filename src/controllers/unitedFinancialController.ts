@@ -197,6 +197,16 @@ export const processUnitedFinancialWebhook = async (
     message: "Image rendering skipped"
   };
   let comparisonImageUrl: string | undefined;
+  let comparisonImageBase64: string | undefined;
+  let comparisonImageFile:
+    | {
+        filename: string;
+        contentType: string;
+        encoding: string;
+        size: number;
+        data: string;
+      }
+    | undefined;
 
   try {
     const html = buildComparisonResultHtml({
@@ -205,7 +215,16 @@ export const processUnitedFinancialWebhook = async (
       generatedAt
     });
     const pngBuffer = await renderComparisonHtmlToImageBuffer(html);
-    console.log("[comparison-image] render success");
+    const rawBase64 = pngBuffer.toString("base64");
+    comparisonImageBase64 = `data:image/png;base64,${rawBase64}`;
+    comparisonImageFile = {
+      filename: "comparison-result.png",
+      contentType: "image/png",
+      encoding: "base64",
+      size: pngBuffer.length,
+      data: rawBase64
+    };
+    console.log("[comparison-image] render success", `${pngBuffer.length} bytes`);
 
     try {
       const uploaded = await uploadImageBufferToCloudinary(pngBuffer);
@@ -242,11 +261,29 @@ export const processUnitedFinancialWebhook = async (
   if (comparisonImageUrl) {
     webhookPayload.comparisonImageUrl = comparisonImageUrl;
   }
+  if (comparisonImageBase64) {
+    webhookPayload.comparisonImageBase64 = comparisonImageBase64;
+  }
+  if (comparisonImageFile) {
+    webhookPayload.comparisonImageFile = comparisonImageFile;
+  }
 
   const resultWebhookUrl = getResultWebhookUrl();
 
+  // Build a readable log version that doesn't dump the full base64.
+  const payloadForLog: Record<string, unknown> = { ...webhookPayload };
+  if (comparisonImageBase64) {
+    payloadForLog.comparisonImageBase64 = `<base64 data URL, ${comparisonImageBase64.length} chars>`;
+  }
+  if (comparisonImageFile) {
+    payloadForLog.comparisonImageFile = {
+      ...comparisonImageFile,
+      data: `<base64 ${comparisonImageFile.size} bytes>`
+    };
+  }
+
   console.log("[result-webhook] POST ->", resultWebhookUrl);
-  console.log("[result-webhook] payload:", JSON.stringify(webhookPayload, null, 2));
+  console.log("[result-webhook] payload:", JSON.stringify(payloadForLog, null, 2));
 
   try {
     await forwardUnitedFinancialWebhookResult(resultWebhookUrl, webhookPayload);
