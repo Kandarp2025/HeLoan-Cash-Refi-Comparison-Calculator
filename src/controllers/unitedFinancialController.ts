@@ -25,8 +25,12 @@ import {
   ComparisonRow
 } from "../shared/unitedFinancialCalculator";
 
-const roundToTwoDecimals = (n: number): number =>
-  Number.isFinite(n) ? Math.round(n * 100) / 100 : n;
+const roundToTwoDecimals = (n: number): number => {
+  if (!Number.isFinite(n)) {
+    return n;
+  }
+  return Number(n.toFixed(2));
+};
 
 const roundComparisonRowForWebhook = (row: ComparisonRow): ComparisonRow => ({
   ...row,
