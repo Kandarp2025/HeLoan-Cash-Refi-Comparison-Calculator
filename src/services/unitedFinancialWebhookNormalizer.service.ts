@@ -79,9 +79,17 @@ const FIELD_DEFINITIONS: Record<CalculatorField, FieldDefinition> = {
     }
   },
   cashRefiFlatFee: {
-    attemptedPatterns: ["flatfee", "cashrefiflatfee"],
+    attemptedPatterns: [
+      "cash_refi_flat_fee",
+      "cashrefiflatfee",
+      "cash refi flat fee",
+      "cashrefiflatfees"
+    ],
     rules: {
-      exactNormalizedKeys: ["flatfee", "cashrefiflatfee"]
+      exactNormalizedKeys: ["cashrefiflatfee", "cashrefiflatfees"],
+      requiredTokens: ["cash", "refi"],
+      anyOfTokens: ["flat"],
+      rejectTokens: ["heloan"]
     }
   },
   heloanAmount: {
@@ -139,9 +147,17 @@ const FIELD_DEFINITIONS: Record<CalculatorField, FieldDefinition> = {
     }
   },
   heloanFlatFee: {
-    attemptedPatterns: ["flatfee", "heloanflatfee"],
+    attemptedPatterns: [
+      "heloan_flat_fee",
+      "heloanflatfee",
+      "heloan flat fee",
+      "heloanflatfees"
+    ],
     rules: {
-      exactNormalizedKeys: ["flatfee", "heloanflatfee"]
+      exactNormalizedKeys: ["heloanflatfee", "heloanflatfees"],
+      requiredTokens: ["heloan"],
+      anyOfTokens: ["flat"],
+      rejectTokens: ["refi"]
     }
   }
 };

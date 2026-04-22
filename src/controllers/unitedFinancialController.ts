@@ -20,6 +20,26 @@ import {
   CloudinaryUploadError
 } from "../services/cloudinary.service";
 import { buildComparisonResultHtml } from "../services/comparisonTemplate.service";
+import {
+  CalculatorResult,
+  ComparisonRow
+} from "../shared/unitedFinancialCalculator";
+
+const roundToTwoDecimals = (n: number): number =>
+  Number.isFinite(n) ? Math.round(n * 100) / 100 : n;
+
+const roundComparisonRowForWebhook = (row: ComparisonRow): ComparisonRow => ({
+  ...row,
+  monthlyPayment: roundToTwoDecimals(row.monthlyPayment),
+  apr: roundToTwoDecimals(row.apr)
+});
+
+const buildResultForWebhook = (result: CalculatorResult): CalculatorResult => ({
+  ...result,
+  heloan: roundComparisonRowForWebhook(result.heloan),
+  cashRefi15: roundComparisonRowForWebhook(result.cashRefi15),
+  cashRefi30: roundComparisonRowForWebhook(result.cashRefi30)
+});
 
 interface ImageRenderStatus {
   success: boolean;
@@ -190,6 +210,7 @@ export const processUnitedFinancialWebhook = async (
   }
 
   const result = runUnitedFinancialCalculation(validation.data);
+  const resultForWebhook = buildResultForWebhook(result);
   const generatedAt = new Date().toISOString();
 
   const imageRender: ImageRenderStatus = {
@@ -255,7 +276,7 @@ export const processUnitedFinancialWebhook = async (
     success: true,
     meta: normalization.meta,
     normalizedPayload: validation.data,
-    result,
+    result: resultForWebhook,
     generatedAt
   };
   if (comparisonImageUrl) {
