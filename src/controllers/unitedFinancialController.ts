@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import mongoose from "mongoose";
 import { UnitedFinancialCalculatorInput } from "../types/unitedFinancial.types";
 import { runUnitedFinancialCalculation } from "../services/unitedFinancialCalculator.service";
 import { renderUnitedFinancialComparisonHtml } from "../templates/unitedFinancialComparison.template";
@@ -14,6 +15,11 @@ import {
   forwardUnitedFinancialWebhookResult,
   WebhookForwarderError
 } from "../services/unitedFinancialWebhookForwarder.service";
+import {
+  findCustomerRecord,
+  saveFinancialResponse,
+  updateCustomerRecord as updateCustomerRecordService
+} from "../services/financialResponse.service";
 import { renderComparisonHtmlToImageBuffer } from "../services/htmlRender.service";
 import {
   uploadImageBufferToCloudinary,
@@ -311,7 +317,17 @@ export const processUnitedFinancialWebhook = async (
   console.log("[result-webhook] payload:", JSON.stringify(payloadForLog, null, 2));
 
   try {
-    await forwardUnitedFinancialWebhookResult(resultWebhookUrl, webhookPayload);
+    const webhookResponse = await forwardUnitedFinancialWebhookResult(resultWebhookUrl, webhookPayload);
+
+    void saveFinancialResponse({
+      name: normalization.meta.name ?? "",
+      email: normalization.meta.email ?? "",
+      phone: normalization.meta.phone ?? "",
+      inputData: rawPayload,
+      normalizedData: validation.data,
+      calculationResult: webhookPayload,
+      webhookResponse
+    });
 
     res.status(200).json({
       success: true,
@@ -321,6 +337,21 @@ export const processUnitedFinancialWebhook = async (
     });
   } catch (error) {
     if (error instanceof WebhookForwarderError) {
+      void saveFinancialResponse({
+        name: normalization.meta.name ?? "",
+        email: normalization.meta.email ?? "",
+        phone: normalization.meta.phone ?? "",
+        inputData: rawPayload,
+        normalizedData: validation.data,
+        calculationResult: webhookPayload,
+        webhookResponse: {
+          statusCode: error.statusCode,
+          message: error.message,
+          callbackUrl: error.callbackUrl,
+          details: error.details
+        }
+      });
+
       res.status(error.statusCode).json({
         success: false,
         statusCode: error.statusCode,
@@ -330,11 +361,123 @@ export const processUnitedFinancialWebhook = async (
       return;
     }
 
+    void saveFinancialResponse({
+      name: normalization.meta.name ?? "",
+      email: normalization.meta.email ?? "",
+      phone: normalization.meta.phone ?? "",
+      inputData: rawPayload,
+      normalizedData: validation.data,
+      calculationResult: webhookPayload,
+      webhookResponse: {
+        message: (error as Error)?.message ?? "Unknown webhook forwarding error"
+      }
+    });
+
     res.status(502).json({
       success: false,
       statusCode: 502,
       message: "Processed successfully, but failed to forward the response to the result webhook.",
       imageRender
+    });
+  }
+};
+
+export const searchCustomerRecord = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
+  try {
+    const search = String(req.query.search ?? "").trim();
+
+    if (!search) {
+      res.status(400).json({
+        success: false,
+        message: "Search value is required"
+      });
+      return;
+    }
+
+    const records = await findCustomerRecord(search);
+    const recordsWithoutWebhookResponse = records.map((record) => {
+      const {
+        webhookResponse: _webhookResponse,
+        ...recordWithoutWebhookResponse
+      } = record as Record<string, unknown>;
+      const reportImageUrl = String(
+        (record as Record<string, any>)?.calculationResult?.comparisonImageUrl || ""
+      );
+
+      return {
+        ...recordWithoutWebhookResponse,
+        reportImageUrl
+      };
+    });
+
+    if (recordsWithoutWebhookResponse.length === 0) {
+      res.status(200).json({
+        success: true,
+        message: "No customer records found",
+        data: []
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Customer records fetched successfully",
+      data: recordsWithoutWebhookResponse
+    });
+  } catch (error) {
+    console.error("[customer-record] search failed:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error"
+    });
+  }
+};
+
+export const updateCustomerRecord = async (
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      res.status(400).json({
+        success: false,
+        message: "Customer record id is required"
+      });
+      return;
+    }
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      res.status(400).json({
+        success: false,
+        message: "Invalid customer record id"
+      });
+      return;
+    }
+
+    const updatedRecord = await updateCustomerRecordService(id, req.body);
+
+    if (!updatedRecord) {
+      res.status(404).json({
+        success: false,
+        message: "Customer record not found"
+      });
+      return;
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Customer record updated successfully",
+      data: updatedRecord
+    });
+  } catch (error) {
+    console.error("[customer-record] update failed:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error"
     });
   }
 };

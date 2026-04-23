@@ -5,6 +5,8 @@ import {
   processUnitedFinancialWebhook,
   renderUnitedFinancialComparisonImageResponse,
   renderUnitedFinancialComparisonHtmlResponse,
+  searchCustomerRecord,
+  updateCustomerRecord,
   validateUnitedFinancialPayload
 } from "../controllers/unitedFinancialController";
 import { validateRequest } from "../middleware/validateRequest";
@@ -44,6 +46,16 @@ unitedFinancialRoutes.post(
   "/api/united-financial/render-image",
   validateRequest(unitedFinancialPayloadSchema),
   renderUnitedFinancialComparisonImageResponse
+);
+
+unitedFinancialRoutes.get(
+  "/api/united-financial/customer-record",
+  searchCustomerRecord
+);
+
+unitedFinancialRoutes.put(
+  "/api/united-financial/customer-record/:id",
+  updateCustomerRecord
 );
 
 export default unitedFinancialRoutes;
