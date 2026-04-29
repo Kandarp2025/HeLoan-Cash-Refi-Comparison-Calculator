@@ -1,19 +1,7 @@
-import mongoose from "mongoose";
 import { CalculatedFinancialResponseModel } from "../models/financialResponse.model";
 
 export const saveFinancialResponse = async (data: any): Promise<void> => {
   try {
-    const mongoUri = process.env.MONGODB_URI?.trim();
-
-    if (!mongoUri) {
-      console.error("[financial-response] save failed: MONGODB_URI is not configured");
-      return;
-    }
-
-    if (mongoose.connection.readyState !== 1) {
-      await mongoose.connect(mongoUri);
-    }
-
     const calculationMeta = data?.calculationResult?.meta;
     const inputData = data?.inputData;
     const rawPayload = data?.rawPayload;
@@ -56,16 +44,6 @@ export const saveFinancialResponse = async (data: any): Promise<void> => {
 };
 
 export const findCustomerRecord = async (search: string): Promise<any[]> => {
-  const mongoUri = process.env.MONGODB_URI?.trim();
-
-  if (!mongoUri) {
-    return [];
-  }
-
-  if (mongoose.connection.readyState !== 1) {
-    await mongoose.connect(mongoUri);
-  }
-
   const trimmedSearch = search.trim();
   const escapedSearch = trimmedSearch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const searchDigits = trimmedSearch.replace(/\D/g, "");
@@ -119,16 +97,6 @@ export const updateCustomerRecord = async (
   id: string,
   data: any
 ): Promise<any | null> => {
-  const mongoUri = process.env.MONGODB_URI?.trim();
-
-  if (!mongoUri) {
-    return null;
-  }
-
-  if (mongoose.connection.readyState !== 1) {
-    await mongoose.connect(mongoUri);
-  }
-
   const existingRecord = await CalculatedFinancialResponseModel.findById(id).lean();
   if (!existingRecord) {
     return null;

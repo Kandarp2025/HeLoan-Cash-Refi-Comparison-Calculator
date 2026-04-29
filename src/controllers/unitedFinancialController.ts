@@ -428,10 +428,20 @@ export const searchCustomerRecord = async (
       data: recordsWithoutWebhookResponse
     });
   } catch (error) {
-    console.error("[customer-record] search failed:", error);
-    res.status(500).json({
+    const message = error instanceof Error ? error.message : String(error);
+    const dbUnavailablePatterns = [
+      "ReplicaSetNoPrimary",
+      "Server selection timed out",
+      "ECONNREFUSED",
+      "ENOTFOUND",
+      "MongooseServerSelectionError"
+    ];
+    const isDbUnavailable = dbUnavailablePatterns.some((pattern) => message.includes(pattern));
+
+    console.error("[customer-record] search failed:", message);
+    res.status(isDbUnavailable ? 503 : 500).json({
       success: false,
-      message: "Internal server error"
+      message: isDbUnavailable ? "Database unavailable, try again shortly" : "Internal server error"
     });
   }
 };
